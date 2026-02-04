@@ -382,6 +382,52 @@ def load_css():
              background: #fef2f2;
         }
 
+        /* RISK BADGES */
+        .risk-badge {
+            padding: 0.5rem 1.5rem;
+            border-radius: 50px;
+            font-weight: 700;
+            font-size: 0.9rem;
+            letter-spacing: 1px;
+            display: inline-block;
+        }
+        
+        .risk-high {
+            background: #fef2f2;
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            animation: pulse-red 2s infinite;
+        }
+        
+        .risk-low {
+            background: #ecfdf5;
+            color: #10b981;
+            border: 1px solid rgba(16, 185, 129, 0.2);
+        }
+
+        /* DRAMATIC HIGH RISK ALERT */
+        .high-risk-alert {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            color: white;
+            padding: 2.5rem;
+            border-radius: 1.5rem;
+            text-align: center;
+            margin-top: 2rem;
+            box-shadow: 0 20px 40px -10px rgba(239, 68, 68, 0.4);
+            border: 1px solid rgba(255,255,255,0.2);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .high-risk-alert::before {
+            content: '⚠️';
+            position: absolute;
+            font-size: 10rem;
+            opacity: 0.1;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
         /* CAUTION PAGE STYLES */
         @keyframes pulse-red {
             0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
@@ -614,6 +660,33 @@ def mock_predict(data):
     
     return final_prob, factors
 
+def get_mitigation_advice(factors):
+    """
+    Returns specific advice based on the identified risk factors.
+    """
+    advice_map = {
+        "Age > 50": "Age is a non-modifiable risk factor, but you can significantly lower overall risk by optimizing your blood pressure, cholesterol, and physical activity levels.",
+        "Obesity": "Aim for a healthy weight (BMI 18.5-24.9). Even a 5-10% weight loss can markedly improve your cardiovascular profile.",
+        "Hypertension": "Adopt the DASH diet (rich in fruits, vegetables, and low-fat dairy), reduce sodium to <2,300mg/day, and discuss management with your doctor.",
+        "Critically High Cholesterol": "Switch to heart-healthy fats, increase soluble fiber intake, and consult a professional about potential lipid-lowering therapies.",
+        "Elevated Cholesterol": "Focus on reducing saturated fats and increasing fiber. Regular aerobic exercise also helps improve your cholesterol profile.",
+        "Elevated Glucose": "Limit refined sugars and processed carbohydrates. Focus on complex grains and consistent physical activity to improve insulin sensitivity.",
+        "Smoker": "Seek immediate medical support for smoking cessation. Quitting today is the most impactful step you can take for your heart health.",
+        "Sedentary Lifestyle": "Aim for at least 30 minutes of moderate-intensity aerobic activity (like brisk walking) on most days of the week."
+    }
+    
+    personalized_advice = []
+    for factor in factors:
+        for key, value in advice_map.items():
+            if key in factor:
+                personalized_advice.append(value)
+                break
+    
+    if not personalized_advice:
+        personalized_advice.append("Maintain your healthy lifestyle! Continue regular check-ups and stay active to keep your risk low.")
+        
+    return personalized_advice
+
 def create_pdf_report(data, prob, factors):
     """
     Generates a PDF clinical report.
@@ -711,9 +784,13 @@ def create_pdf_report(data, prob, factors):
     
     # Recommendations
     pdf.set_font('Arial', 'B', 12)
-    pdf.cell(0, 10, "Clinical Recommendations:", 0, 1)
+    pdf.cell(0, 10, "Personalized Action Plan:", 0, 1)
     pdf.set_font('Arial', '', 11)
-    pdf.multi_cell(0, 8, "1. Maintain a balanced, heart-healthy diet.\n2. Engage in 150 mins of moderate activity weekly.\n3. Monitor blood pressure regularly.\n4. Consult with a cardiologist for a comprehensive examination.")
+    
+    advice_list = get_mitigation_advice(factors)
+    for advice in advice_list:
+        pdf.multi_cell(0, 8, f"- {advice}")
+        pdf.ln(2)
     
     # Footer Disclaimer
     pdf.set_y(-40)
@@ -871,6 +948,21 @@ def render_prediction_form():
                     </p>
                 </div>
             """, unsafe_allow_html=True)
+            
+            if prob > 0.5:
+                st.markdown("""
+                    <div class="high-risk-alert">
+                        <h2 style="color: white; margin-bottom: 0.5rem; font-weight: 800;">Urgent Medical Review Suggested</h2>
+                        <p style="color: rgba(255,255,255,0.9); font-size: 1.1rem; line-height: 1.6;">
+                            Our clinical-grade model has detected multiple biomarkers that correlate with advanced cardiovascular risk. 
+                            Please schedule a comprehensive examination with a cardiologist at your earliest convenience.
+                        </p>
+                        <div style="margin-top: 1.5rem; font-size: 0.85rem; opacity: 0.8;">
+                            This is an AI prediction and must be clinically validated.
+                        </div>
+                    </div>
+                """, unsafe_allow_html=True)
+                
             st.markdown('</div>', unsafe_allow_html=True)
             
         with c_res2:
@@ -901,6 +993,17 @@ def render_prediction_form():
                     </ul>
                 </div>
             """, unsafe_allow_html=True)
+
+            # PERSONALIZED ACTION PLAN
+            st.markdown("### 📋 Personalized Action Plan")
+            advice_list = get_mitigation_advice(factors)
+            
+            for advice in advice_list:
+                st.markdown(f"""
+                    <div style="background: #f8fafc; padding: 1.2rem; border-radius: 1rem; border-left: 4px solid #3b82f6; margin-bottom: 0.8rem;">
+                        <span style="color: #1e293b; font-size: 0.95rem; line-height: 1.6;">{advice}</span>
+                    </div>
+                """, unsafe_allow_html=True)
 
             # PDF Download Button
             st.markdown("<br>", unsafe_allow_html=True)

@@ -4,6 +4,9 @@ import random
 import pandas as pd
 import numpy as np
 import pickle # Added for potential future model loading
+from fpdf import FPDF
+import io
+import datetime
 
 # Try to import plotly
 try:
@@ -611,6 +614,115 @@ def mock_predict(data):
     
     return final_prob, factors
 
+def create_pdf_report(data, prob, factors):
+    """
+    Generates a PDF clinical report.
+    """
+    pdf = FPDF()
+    pdf.add_page()
+    
+    # Header
+    pdf.set_fill_color(37, 99, 235) # Primary Blue
+    pdf.rect(0, 0, 210, 40, 'F')
+    
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_font('Arial', 'B', 24)
+    pdf.cell(0, 20, 'CardioGuard AI', 0, 1, 'C')
+    pdf.set_font('Arial', '', 12)
+    pdf.cell(0, 10, 'Clinical Risk Assessment Report', 0, 1, 'C')
+    
+    pdf.set_text_color(0, 0, 0)
+    pdf.ln(20)
+    
+    # Report Info
+    pdf.set_font('Arial', 'B', 12)
+    pdf.cell(100, 10, f"Report Date: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    pdf.cell(0, 10, f"Patient ID: CG-{random.randint(1000, 9999)}", 0, 1, 'R')
+    pdf.ln(5)
+    
+    # Biological Profile
+    pdf.set_fill_color(241, 245, 249)
+    pdf.set_font('Arial', 'B', 14)
+    pdf.cell(0, 10, ' Biological Profile', 0, 1, 'L', True)
+    pdf.set_font('Arial', '', 11)
+    
+    col_width = 45
+    pdf.cell(col_width, 10, f"Age: {data['age']} years")
+    gender_str = "Male" if data['gender'] == 2 else "Female"
+    pdf.cell(col_width, 10, f"Gender: {gender_str}")
+    pdf.cell(col_width, 10, f"Height: {data['height']} cm")
+    pdf.cell(col_width, 10, f"Weight: {data['weight']} kg", 0, 1)
+    
+    bmi = data['weight'] / ((data['height'] / 100) ** 2)
+    pdf.cell(0, 10, f"Calculated BMI: {bmi:.1f}", 0, 1)
+    pdf.ln(5)
+    
+    # Clinical Vitals
+    pdf.set_fill_color(241, 245, 249)
+    pdf.set_font('Arial', 'B', 14)
+    pdf.cell(0, 10, ' Clinical Vitals', 0, 1, 'L', True)
+    pdf.set_font('Arial', '', 11)
+    
+    pdf.cell(col_width, 10, f"Systolic BP: {data['ap_hi']} mmHg")
+    pdf.cell(col_width, 10, f"Diastolic BP: {data['ap_lo']} mmHg")
+    
+    chol_map = {1: "Normal", 2: "Above Normal", 3: "Well Above Normal"}
+    gluc_map = {1: "Normal", 2: "Above Normal", 3: "Well Above Normal"}
+    
+    pdf.cell(col_width, 10, f"Cholesterol: {chol_map.get(data['cholesterol'], 'N/A')}")
+    pdf.cell(col_width, 10, f"Glucose: {gluc_map.get(data['gluc'], 'N/A')}", 0, 1)
+    pdf.ln(5)
+    
+    # Risk Assessment Result
+    pdf.set_fill_color(241, 245, 249)
+    pdf.set_font('Arial', 'B', 14)
+    pdf.cell(0, 10, ' Diagnostic Result', 0, 1, 'L', True)
+    
+    risk_level = "CRITICAL" if prob > 0.5 else "LOW RISK"
+    risk_color = (239, 68, 68) if prob > 0.5 else (16, 185, 129)
+    
+    pdf.set_font('Arial', 'B', 12)
+    pdf.cell(60, 15, "Calculated Risk Probability:")
+    pdf.set_text_color(*risk_color)
+    pdf.set_font('Arial', 'B', 20)
+    pdf.cell(0, 15, f"{prob*100:.1f}%", 0, 1)
+    
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_font('Arial', 'B', 12)
+    pdf.cell(60, 10, "Assessment Status:")
+    pdf.set_text_color(*risk_color)
+    pdf.cell(0, 10, risk_level, 0, 1)
+    
+    pdf.set_text_color(0, 0, 0)
+    pdf.ln(5)
+    
+    # Contributing Factors
+    if factors:
+        pdf.set_font('Arial', 'B', 12)
+        pdf.cell(0, 10, "Contributing Risk Factors:", 0, 1)
+        pdf.set_font('Arial', '', 11)
+        for factor in factors:
+            pdf.cell(0, 8, f"  - {factor}", 0, 1)
+    else:
+        pdf.set_font('Arial', '', 11)
+        pdf.cell(0, 10, "- No significant individual risk factors detected based on current vitals.", 0, 1)
+    
+    pdf.ln(10)
+    
+    # Recommendations
+    pdf.set_font('Arial', 'B', 12)
+    pdf.cell(0, 10, "Clinical Recommendations:", 0, 1)
+    pdf.set_font('Arial', '', 11)
+    pdf.multi_cell(0, 8, "1. Maintain a balanced, heart-healthy diet.\n2. Engage in 150 mins of moderate activity weekly.\n3. Monitor blood pressure regularly.\n4. Consult with a cardiologist for a comprehensive examination.")
+    
+    # Footer Disclaimer
+    pdf.set_y(-40)
+    pdf.set_font('Arial', 'I', 8)
+    pdf.set_text_color(100, 100, 100)
+    pdf.multi_cell(0, 4, "DISCLAIMER: CardioGuard AI is a predictive support tool, NOT a replacement for professional medical diagnosis. This report is generated based on user-provided data and should be reviewed by a qualified healthcare professional.", 0, 'C')
+    
+    return pdf.output(dest='S').encode('latin-1')
+
 def render_prediction_form():
     st.markdown('<div class="section-header">Medical Assessment Protocol</div>', unsafe_allow_html=True)
     
@@ -688,6 +800,7 @@ def render_prediction_form():
                     "alco": alco_val,
                     "active": active_val
                 }
+                st.session_state.last_input_data = data
                 
                 # SIMULATED PROCESSING ANIMATION
                 progress_text = "Analyzing Bio-markers..."
@@ -784,10 +897,31 @@ def render_prediction_form():
                     <ul style="padding-left: 1.2rem; margin: 0; color: #475569; line-height: 1.8;">
                         <li>Maintain a balanced, heart-healthy diet.</li>
                         <li>Engage in 150 mins of moderate activity weekly.</li>
-                        <li>Monitor blood pressure regularly.</li>
+                <li>Monitor blood pressure regularly.</li>
                     </ul>
                 </div>
             """, unsafe_allow_html=True)
+
+            # PDF Download Button
+            st.markdown("<br>", unsafe_allow_html=True)
+            try:
+                # Use data from session state if available
+                if 'last_input_data' in st.session_state:
+                    pdf_bytes = create_pdf_report(
+                        st.session_state.last_input_data, 
+                        st.session_state.last_prediction, 
+                        st.session_state.last_factors
+                    )
+                    
+                    st.download_button(
+                        label="📥 Download Clinical Report (PDF)",
+                        data=pdf_bytes,
+                        file_name=f"CardioGuard_Report_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True
+                    )
+            except Exception as e:
+                st.error(f"Error generating PDF: {e}")
 
 def render_insights():
     st.markdown('<div class="section-header">Analytics & Model Insights</div>', unsafe_allow_html=True)
